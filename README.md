@@ -141,6 +141,28 @@ docker run -d \
 
 > 两者必须不同（同一端口只能被一个进程监听）。
 
+### 工作目录（DSH_WORKSPACE）
+
+通过环境变量 `DSH_WORKSPACE` 可切换 DSH 的工作目录（**所有变体都支持**）：
+
+| 环境变量 | 含义 | 默认值 |
+|---|---|---|
+| `DSH_WORKSPACE` | DSH 工作目录：DSH 进程的 cwd 切换为该目录（不存在会自动创建）；DSH 就绪后自动把该目录登记为工作区，直接出现在网页的工作区列表里，新建会话/文件默认都在该目录下（不再落在 `/root`） | 未设置（跟随容器进程 cwd） |
+
+```bash
+# 把 DSH 工作目录切换到 /workspace（同时挂载命名卷持久化其中的文件）
+docker run -d \
+  --name dsh-harness \
+  -p 3080:3080 \
+  -v dsh-data:/root/.dsh \
+  -v my-workspace:/workspace \
+  -e DSH_WORKSPACE=/workspace \
+  --restart unless-stopped \
+  smanx/deepseek-harness
+```
+
+> 未设置 `DSH_WORKSPACE` 时行为与原来完全一致，不影响既有部署。
+
 admin 变体另有以下环境变量：
 
 | 环境变量 | 含义 | 默认值 |

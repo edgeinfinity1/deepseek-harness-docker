@@ -15,6 +15,13 @@ fi
 DSH_PORT="${DSH_PORT:-3079}"
 PROXY_PORT="${PROXY_PORT:-3080}"
 
+# ── 0. DSH 工作目录：设置 DSH_WORKSPACE 环境变量可切换 DSH 的工作目录 ──
+if [ -n "$DSH_WORKSPACE" ]; then
+  echo "[dsh] DSH 工作目录 (DSH_WORKSPACE): $DSH_WORKSPACE"
+  mkdir -p "$DSH_WORKSPACE"
+  cd "$DSH_WORKSPACE"
+fi
+
 # ── 1. 启动 DSH（默认监听 127.0.0.1:3080）────────────────────────────
 echo "[dsh] 启动 DSH (dsh web --port $DSH_PORT) ..."
 dsh web --port "$DSH_PORT" &
