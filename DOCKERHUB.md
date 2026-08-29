@@ -10,7 +10,7 @@ Github 项目主页：https://github.com/smanx/deepseek-harness-docker
 
 ## 在线体验地址（Demo）
 
-- 体验地址：https://dsh.smanx.xx.kg
+- 体验地址：https://deepseek-harness-test-latest.onrender.com
 - 登录账号 / 密码：`admin` / `admin`
 
 > ⚠️ **注意：** 该地址为**公开地址**。如需填入你自己的 API Key（如 DeepSeek 等），请**谨慎填写**，以免 Key 泄露。
@@ -144,26 +144,9 @@ docker run -d \
 | `PROXY_PASSWORD` | Basic Auth 密码（可选） | 未设置 |
 | `NPM_CONFIG_REGISTRY` | admin 变体管理页「npm 源」的默认值（优先级低于页面配置） | `https://registry.npmjs.org/` |
 | `DSH_INSTALL_DIR` | admin 变体 DSH 安装目录（页面安装的 DSH 及状态文件都在这里，建议挂载命名卷） | `/opt/dsh` |
-| `DSH_WORKSPACE` | **DSH 工作目录（所有变体都支持）**：DSH 进程的 cwd 切换为该目录（不存在自动创建）；DSH 就绪后自动把该目录登记为工作区，出现在网页工作区列表，新建会话/文件默认都在该目录下 | 未设置（跟随容器进程 cwd） |
 
 > `DSH_PORT` 与 `PROXY_PORT` 必须不同（同一端口只能被一个进程监听）。
 > 修改 `PROXY_PORT` 时，`-p` 端口映射要对应改成 `-p <宿主机端口>:<新代理端口>`。
-
-### 设置 DSH 工作目录（DSH_WORKSPACE）
-
-未设置 `DSH_WORKSPACE` 时 DSH 工作目录跟随容器进程 cwd；设置后切换到指定目录（不存在会自动创建），
-DSH 就绪后该目录会自动登记为工作区，直接出现在网页工作区列表，新建会话/文件默认都在该目录下（不再落在 `/root`）：
-
-```bash
-docker run -d \
-  --name dsh-harness \
-  -p 3080:3080 \
-  -v dsh-data:/root/.dsh \
-  -v my-workspace:/workspace \
-  -e DSH_WORKSPACE=/workspace \
-  --restart unless-stopped \
-  smanx/deepseek-harness:latest
-```
 
 ### 启用 Basic Auth
 

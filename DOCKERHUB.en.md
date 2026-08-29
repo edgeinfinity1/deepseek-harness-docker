@@ -9,7 +9,7 @@ An out-of-the-box **DeepSeek Harness (DSH)** Docker image with a built-in Node r
 
 ## Online Demo
 
-- Demo URL: https://dsh.smanx.xx.kg
+- Demo URL: https://deepseek-harness-test-latest.onrender.com
 - Username / Password: `admin` / `admin`
 
 > ⚠️ **Note:** This is a **public address**. If you fill in your own API key (e.g. DeepSeek), please be **very careful** — your key may be exposed.
@@ -144,28 +144,9 @@ docker run -d \
 | `PROXY_PASSWORD` | Basic Auth password (optional) | unset |
 | `NPM_CONFIG_REGISTRY` | Default npm registry on the admin page (lower priority than the page config) | `https://registry.npmjs.org/` |
 | `DSH_INSTALL_DIR` | DSH install directory in the admin variant (installed DSH and config state live here; mount a named volume) | `/opt/dsh` |
-| `DSH_WORKSPACE` | **DSH working directory (supported by all variants)**: the DSH process's cwd is switched to this directory (created automatically if missing); once DSH is ready, the directory is auto-registered as a workspace and appears in the web UI's workspace list, so new sessions/files land there by default | unset (follows the container process cwd) |
 
 > `DSH_PORT` and `PROXY_PORT` must differ (a port can only be bound by one process).
 > If you change `PROXY_PORT`, remember to update the port mapping accordingly: `-p <host-port>:<new-proxy-port>`.
-
-### Setting the DSH working directory (DSH_WORKSPACE)
-
-When `DSH_WORKSPACE` is unset, the DSH working directory follows the container process cwd. When set,
-DSH switches to the given directory (created automatically if missing) and auto-registers it as a
-workspace once ready, so it appears directly in the web UI's workspace list and new sessions/files
-land there by default (no longer under `/root`):
-
-```bash
-docker run -d \
-  --name dsh-harness \
-  -p 3080:3080 \
-  -v dsh-data:/root/.dsh \
-  -v my-workspace:/workspace \
-  -e DSH_WORKSPACE=/workspace \
-  --restart unless-stopped \
-  smanx/deepseek-harness:latest
-```
 
 ### Enabling Basic Auth
 
