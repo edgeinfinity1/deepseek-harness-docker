@@ -9,9 +9,9 @@
 # 特殊前缀 test：除安装下列工具外，Dockerfile 还会在 DSH 安装完毕后额外安装
 # dsh 插件（dsh plugin --profile web add github:smanx/dsh-conversation-indicator#main）。
 test|git curl wget nano jq procps ca-certificates unzip vim openssh-client zip htop tmux tree openssl python3 build-essential bash-completion|pnpm|1
+admin|git curl wget nano jq procps ca-certificates unzip vim openssh-client zip htop tmux tree openssl python3 build-essential bash-completion|pnpm|1
 devtools|git curl wget nano jq procps ca-certificates unzip vim openssh-client zip htop tmux tree openssl python3 build-essential bash-completion|pnpm|1
 devtools-min|git curl wget nano jq procps ca-certificates unzip|pnpm|1
 # admin 变体：不预装 DSH，容器启动进管理台由用户自选版本安装/切换。
 # 必须保留 python3/build-essential（运行时 npm 安装 DSH 需编译原生模块 node-pty）；
 # 该变体运行入口为 manager 管理服务（entrypoint.sh 依据 /app/.admin-mode 标记分发）。
-admin|git curl wget nano jq procps ca-certificates unzip vim openssh-client zip htop tmux tree openssl python3 build-essential bash-completion|pnpm|1
