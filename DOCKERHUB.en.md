@@ -9,7 +9,7 @@ An out-of-the-box **DeepSeek Harness (DSH)** Docker image with a built-in Node r
 
 ## Online Demo
 
-- Demo URL: https://deepseek-harness-test-latest.onrender.com
+- Demo URL: https://dsh.smanx.xx.kg
 - Username / Password: `admin` / `admin`
 
 > ⚠️ **Note:** This is a **public address**. If you fill in your own API key (e.g. DeepSeek), please be **very careful** — your key may be exposed.

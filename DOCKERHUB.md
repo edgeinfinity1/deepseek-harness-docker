@@ -10,7 +10,7 @@ Github 项目主页：https://github.com/smanx/deepseek-harness-docker
 
 ## 在线体验地址（Demo）
 
-- 体验地址：https://deepseek-harness-test-latest.onrender.com
+- 体验地址：https://dsh.smanx.xx.kg
 - 登录账号 / 密码：`admin` / `admin`
 
 > ⚠️ **注意：** 该地址为**公开地址**。如需填入你自己的 API Key（如 DeepSeek 等），请**谨慎填写**，以免 Key 泄露。
