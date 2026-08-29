@@ -107,50 +107,63 @@ async function waitForLaunchToken(timeoutMs = 15000) {
   return null;
 }
 
-// DSH 就绪后，用启动令牌换取浏览器会话 Cookie，再调用 workspace.create 把
-// DSH_WORKSPACE 登记为工作区（幂等：已存在则复用，不影响既有会话/文件）。
+// DSH 就绪后，把 DSH_WORKSPACE 登记为工作区（幂等：已存在则复用，不影响既有会话/文件）。
+// 渐进式：先无凭据直接调用（部分 DSH 版本回环访问 /api 无需 Cookie）；401 时再从启动日志
+// 抓 ?token= 换取浏览器会话 Cookie 后重试。
 async function registerWorkspace() {
   if (!DSH_WORKSPACE || !dshReady) return;
+  const base = `http://127.0.0.1:${DSH_PORT}`;
   try {
-    const token = await waitForLaunchToken();
-    if (!token) {
-      console.warn('[manager] 未捕获 DSH 启动令牌，跳过工作区自动登记');
-      return;
+    let result = await callWorkspaceCreate(base, null);
+    if (result === 'need-auth') {
+      const token = await waitForLaunchToken();
+      if (!token) {
+        console.warn('[manager] 未捕获 DSH 启动令牌，跳过工作区自动登记');
+        return;
+      }
+      // 1. 用启动令牌换取浏览器会话 Cookie（回环地址，Host/Origin 信任栅栏放行）
+      const authRes = await fetch(`${base}/?token=${token}`, { redirect: 'manual' });
+      const setCookie = authRes.headers.get('set-cookie');
+      if (!setCookie) {
+        console.warn('[manager] DSH 会话 Cookie 获取失败，跳过工作区自动登记');
+        return;
+      }
+      result = await callWorkspaceCreate(base, setCookie.split(';')[0]);
     }
-    const base = `http://127.0.0.1:${DSH_PORT}`;
-    // 1. 用启动令牌换取浏览器会话 Cookie（回环地址，Host/Origin 信任栅栏放行）
-    const authRes = await fetch(`${base}/?token=${token}`, { redirect: 'manual' });
-    const setCookie = authRes.headers.get('set-cookie');
-    if (!setCookie) {
-      console.warn('[manager] DSH 会话 Cookie 获取失败，跳过工作区自动登记');
-      return;
-    }
-    const cookie = setCookie.split(';')[0];
-    // 2. 调用 workspace.create 登记工作区
-    const res = await fetch(`${base}/api/workspace.create`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({
-        type: 'client-request',
-        rpcId: `workspace-${Date.now()}`,
-        method: 'workspace.create',
-        payload: { path: DSH_WORKSPACE },
-      }),
-    });
-    const text = await res.text();
-    let body = null;
-    try { body = JSON.parse(text); } catch {}
-    const result = body && body.result;
-    if (res.ok && result && result.ok === true) {
+    if (result.ok === true) {
       const created = result.value && result.value.created === true;
       console.log(`[manager] 工作区已登记: ${DSH_WORKSPACE}${created ? '（新建）' : '（复用）'}`);
     } else {
-      const err = result && result.error ? result.error.message : (text || `HTTP ${res.status}`);
-      console.warn(`[manager] 工作区登记失败: ${err}`);
+      console.warn(`[manager] 工作区登记失败: ${result.error}`);
     }
   } catch (e) {
     console.warn(`[manager] 工作区自动登记异常: ${e.message}`);
   }
+}
+
+async function callWorkspaceCreate(base, cookie) {
+  const headers = { 'content-type': 'application/json' };
+  if (cookie !== null) headers.cookie = cookie;
+  const res = await fetch(`${base}/api/workspace.create`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      type: 'client-request',
+      rpcId: `workspace-${Date.now()}`,
+      method: 'workspace.create',
+      payload: { path: DSH_WORKSPACE },
+    }),
+  });
+  if (res.status === 401) return 'need-auth';
+  const text = await res.text();
+  let body = null;
+  try { body = JSON.parse(text); } catch {}
+  const result = body && body.result;
+  if (res.ok && result && result.ok === true) return result;
+  return {
+    ok: false,
+    error: (result && result.error && result.error.message) || text || `HTTP ${res.status}`,
+  };
 }
 
 function bootDsh() {
