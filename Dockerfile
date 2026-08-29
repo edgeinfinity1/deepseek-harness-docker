@@ -11,13 +11,18 @@
 # 再把 /usr/local（Node + DSH + 编译产物）复制进精简运行镜像，运行镜像不保留编译工具。
 
 # ── 阶段 1：安装 DSH 并编译原生模块 ────────────────────────────────
-# admin 变体不预装 DSH（由用户在管理页自选版本安装），仅保留 Node/npm 运行时
+# admin 变体预装最新 DSH（@next）到 /opt/dsh（即管理服务的安装目录，挂载空卷时自动填充、开箱即用）
 FROM node:24-slim AS dsh-builder
 ARG DEV_TOOLS=none
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/* \
-    && if [ "$DEV_TOOLS" != "admin" ]; then npm install -g --no-audit --no-fund @deepseek-ai/dsh@next; fi
+    && if [ "$DEV_TOOLS" = "admin" ]; then \
+         npm install -g --prefix /opt/dsh --no-audit --no-fund @deepseek-ai/dsh@next; \
+       else \
+         npm install -g --no-audit --no-fund @deepseek-ai/dsh@next; \
+       fi \
+    && mkdir -p /opt/dsh
 
 # ── 阶段 2：精简运行镜像 ───────────────────────────────────────────
 FROM node:24-slim
@@ -32,9 +37,15 @@ ARG DEV_TOOLS=none
 # /usr/local 内容一致，仅多出 npm 全局安装的 @deepseek-ai/dsh
 COPY --from=dsh-builder /usr/local/ /usr/local/
 
+# admin 变体：把构建阶段预装的最新 DSH 复制到管理服务安装目录 /opt/dsh
+# （首次挂载空卷时 Docker 自动填充该目录，管理服务启动即识别并自动拉起 DSH）
+COPY --from=dsh-builder /opt/dsh/ /opt/dsh/
+
 # 生成版本文件，供 CI（docker-build/.github/workflows/projects.yml）用 docker cp 提取 APP_VERSION 打镜像标签；
-# 若该文件缺失，CI 会回退为日期标签；admin 变体不预装 DSH（版本由用户自选），故跳过
-RUN if [ "$DEV_TOOLS" != "admin" ]; then \
+# 若该文件缺失，CI 会回退为日期标签；admin 变体预装在 /opt/dsh，其余变体在 /usr/local
+RUN if [ "$DEV_TOOLS" = "admin" ]; then \
+      node -p "'APP_VERSION=' + require('/opt/dsh/lib/node_modules/@deepseek-ai/dsh/package.json').version" > /tmp/app_version.env; \
+    else \
       node -p "'APP_VERSION=' + require('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json').version" > /tmp/app_version.env; \
     fi
 
@@ -50,7 +61,8 @@ RUN cd /app/manager && npm install --omit=dev --no-audit --no-fund
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# admin 变体标记：镜像内存在 /app/.admin-mode 时 entrypoint.sh 改走管理服务（不预装 DSH，由用户在页面安装）
+# admin 变体标记：镜像内存在 /app/.admin-mode 时 entrypoint.sh 改走管理服务
+# （预装最新 DSH，管理台仍可自选版本安装/切换、配置 npm 源）
 RUN if [ "$DEV_TOOLS" = "admin" ]; then touch /app/.admin-mode; fi
 
 # ── 开发工具（按 DEV_TOOLS 前缀从 .build-variants 读取工具列表安装）──

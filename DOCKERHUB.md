@@ -52,9 +52,9 @@ WebSocket 实时通道（`/api/events.mux`、`/api/events.host`）由代理自�
 | `latest` | 精简运行镜像 | 无（仅 Node 运行时 + DSH + 反向代理） |
 | `devtools-min-latest` | 精简工具版，常用调试工具 | git、curl、wget、nano、jq、procps、ca-certificates、unzip；npm 全局包：pnpm；uv |
 | `devtools-latest` | 完整工具版，可在容器内开发/编译 | 精简版全部 + vim、openssh-client、zip、htop、tmux、tree、openssl、python3、build-essential(make+g++)、bash-completion；npm 全局包：pnpm；uv |
-| `admin-latest` | 管理版：**不预装 DSH**，启动进管理台，页面自选版本安装/切换 | 同完整工具版（含 pnpm、uv）+ 管理服务；保留 python3/build-essential 供运行时编译 node-pty |
+| `admin-latest` | 管理版：**预装最新 DSH**，开箱即用，页面自选版本安装/切换 | 同完整工具版（含 pnpm、uv）+ 管理服务；保留 python3/build-essential 供运行时编译 node-pty |
 
-> 每个 tag 都有对应的**版本号 tag**：`latest` ↔ `<版本>`、`devtools-latest` ↔ `devtools-<版本>`、`devtools-min-latest` ↔ `devtools-min-<版本>`、`admin-latest` ↔ `admin-<构建日期>`（admin 无固定 DSH 版本，版本号 tag 为构建日期）。
+> 每个 tag 都有对应的**版本号 tag**：`latest` ↔ `<版本>`、`devtools-latest` ↔ `devtools-<版本>`、`devtools-min-latest` ↔ `devtools-min-<版本>`、`admin-latest` ↔ `admin-<版本>`（admin 预装最新 DSH，版本号 tag 即为 DSH 版本）。
 
 **简单示例：**
 
@@ -93,9 +93,9 @@ docker run -d \
 > 工具版还内置 **uv**（Python 包管理器，静态二进制，不依赖系统 Python）。不少社区 MCP server 以
 > `uvx` / `uv run` 方式启动（DSH 的 MCP 客户端配置中常见 `"command": "uvx"`），缺少 uv 时这类 MCP 无法运行。
 
-#### admin 变体（管理版，不预装 DSH）
+#### admin 变体（管理版，预装最新 DSH）
 
-`admin` 变体**不预装任何 DSH 版本**。容器启动后访问 `/` 会自动跳转到管理员页面 `/__admin/`：
+`admin` 变体**随镜像预装最新 DSH（@next）**。容器启动后管理服务自动识别并拉起 DSH，直接访问 `/` 即可进入 DSH 界面；访问 `/__admin/` 进入管理台：
 
 - 查看 `@deepseek-ai/dsh` 可用版本（`latest`/`next` 等 dist-tag + 全部版本），选择并**安装 / 切换**版本，安装进度实时显示；
 - 手动配置 **npm 源（NPM_CONFIG_REGISTRY）**：输入框**自动回显默认值**（环境变量 `NPM_CONFIG_REGISTRY` 或官方源）与**上次配置的值**，并显示当前生效值，可一键「使用默认值」或清空恢复默认；优先级：**页面配置 > 环境变量 `NPM_CONFIG_REGISTRY` > 默认值**；
@@ -113,7 +113,7 @@ docker run -d \
   smanx/deepseek-harness:admin-latest
 ```
 
-> admin 变体保留了 `python3` + `build-essential`（node-pty 在 Linux 上无预编译产物，页面安装 DSH 时需容器内从源码编译原生模块），镜像比精简版略大。
+> admin 变体保留了 `python3` + `build-essential`（node-pty 在 Linux 上无预编译产物，管理台安装其他版本 DSH 时需容器内从源码编译原生模块），镜像比精简版略大。
 
 ### 备用镜像（GHCR）
 

@@ -12,6 +12,6 @@ test|git curl wget nano jq procps ca-certificates unzip vim openssh-client zip h
 admin|git curl wget nano jq procps ca-certificates unzip vim openssh-client zip htop tmux tree openssl python3 build-essential bash-completion|pnpm|1
 devtools|git curl wget nano jq procps ca-certificates unzip vim openssh-client zip htop tmux tree openssl python3 build-essential bash-completion|pnpm|1
 devtools-min|git curl wget nano jq procps ca-certificates unzip|pnpm|1
-# admin 变体：不预装 DSH，容器启动进管理台由用户自选版本安装/切换。
-# 必须保留 python3/build-essential（运行时 npm 安装 DSH 需编译原生模块 node-pty）；
+# admin 变体：默认预装最新 DSH（@next，随镜像打包，开箱即用），管理台仍可自选版本安装/切换、配置 npm 源。
+# 必须保留 python3/build-essential（管理台运行时安装其他版本 DSH 需编译原生模块 node-pty）；
 # 该变体运行入口为 manager 管理服务（entrypoint.sh 依据 /app/.admin-mode 标记分发）。

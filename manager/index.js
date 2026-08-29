@@ -184,10 +184,12 @@ function runCmd(cmd, args, env, onLine) {
     child.stdout.on('data', push);
     child.stderr.on('data', push);
     child.on('error', reject);
-    child.on('close', code => {
+    // 用 exit 而非 close：npm 会派生 node-gyp/make 等子进程并可能继承管道，
+    // 导致 close 在命令真正结束后一直不触发（表现为安装任务卡在"安装中"）
+    child.on('exit', (code, sig) => {
       if (buf.trim()) onLine(buf);
       if (code === 0) resolve();
-      else reject(new Error(`命令退出码 ${code}`));
+      else reject(new Error(`命令退出码 ${code == null ? '信号 ' + sig : code}`));
     });
   });
 }
@@ -217,6 +219,7 @@ async function installDsh(version, registry) {
   }
   installMeta.ok = ok;
   installMeta.done = true;
+  installMeta.running = false; // 复位安装中标志，否则页面顶部状态会一直显示「安装中」
   installing = false;
   broadcast('done', { ok, version: actualVersion() });
   if (ok) {
@@ -469,9 +472,15 @@ server.listen(LISTEN_PORT, '0.0.0.0', () => {
   console.log(`[manager] 管理员页面: http://<host>:${LISTEN_PORT}/__admin/（未安装 DSH 时访问 / 会自动跳转）`);
   console.log(`[manager] npm 源: 默认 ${DEFAULT_REGISTRY}${state.registry ? `，页面已配置 ${state.registry}` : ''}`);
   if (isDshInstalled()) {
+    // 镜像预装 / 卷上已有 DSH 时，同步版本到状态，保证页面「当前版本」正常显示
+    if (!state.installedVersion) {
+      state.installedVersion = actualVersion();
+      state.requestedVersion = state.installedVersion;
+      saveState();
+    }
     bootDsh().then(r => console.log(r.ok ? `[manager] DSH ${actualVersion()} 已就绪` : `[manager] DSH 启动失败: ${r.reason}`));
   } else {
-    console.log('[manager] 未检测到已安装的 DSH，首次使用请打开管理员页选择版本安装');
+    console.log('[manager] 未检测到已安装的 DSH，请打开管理员页选择版本安装');
   }
 });
 

@@ -17,7 +17,7 @@ Docker 化部署 **DeepSeek Harness（DSH）** + **Node 反向代理**：
 
 ```
 deepseek-harness/
-├── Dockerfile            # node:24-slim + 安装 DSH + 代理（支持 DEV_TOOLS 构建参数；admin 变体不预装 DSH）
+├── Dockerfile            # node:24-slim + 安装 DSH + 代理（支持 DEV_TOOLS 构建参数；admin 变体预装最新 DSH）
 ├── entrypoint.sh         # 先启动 DSH，等待就绪，再启动代理（检测到 admin 变体标记则改走管理服务）
 ├── proxy/
 │   ├── index.js          # 代理（转发 + polyfill 注入 + Origin 对齐 + Basic Auth）
@@ -73,7 +73,7 @@ Linux 下 node-pty 没有预编译产物，会从源码编译（Dockerfile 已�
 | `smanx/deepseek-harness:devtools-min-latest` | `smanx/deepseek-harness:devtools-min-<版本>` | 精简工具版，常用调试工具 | git、curl、wget、nano、jq、procps、ca-certificates、unzip；npm 全局包：pnpm；uv |
 | `smanx/deepseek-harness:devtools-latest` | `smanx/deepseek-harness:devtools-<版本>` | 完整工具版，可在容器内开发/编译 | 精简版全部 + vim、openssh-client、zip、htop、tmux、tree、openssl、python3、build-essential(make+g++)、bash-completion；npm 全局包：pnpm；uv |
 | `smanx/deepseek-harness:test-latest` | `smanx/deepseek-harness:test-<版本>` | 测试 tag：完整工具 + 自动安装 DSH 插件 | 同完整工具版（含 pnpm、uv）；DSH 安装后额外执行 `dsh plugin --profile web add github:smanx/dsh-conversation-indicator#main` |
-| `smanx/deepseek-harness:admin-latest` | `smanx/deepseek-harness:admin-<构建日期>` | 管理版：**不预装 DSH**，启动进管理台，页面自选版本安装/切换 | 同完整工具版（含 pnpm、uv）+ 管理服务；保留 python3/build-essential 供运行时编译 node-pty |
+| `smanx/deepseek-harness:admin-latest` | `smanx/deepseek-harness:admin-<版本>` | 管理版：**预装最新 DSH**，开箱即用，管理台可自选版本安装/切换 | 同完整工具版（含 pnpm、uv）+ 管理服务；保留 python3/build-essential 供运行时编译 node-pty |
 
 ```bash
 # 精简工具版（DEV_TOOLS=前缀与 .build-variants 第一列一致）
@@ -100,10 +100,10 @@ docker build -t smanx/deepseek-harness:devtools-<版本> --build-arg DEV_TOOLS=d
 > 不少社区 MCP server 以 `uvx` / `uv run` 方式启动（DSH 的 MCP 客户端配置中常见
 > `"command": "uvx"`），缺少 uv 时这类 MCP 无法运行；uv 会在首次使用时按需下载 Python 解释器。
 
-### admin 变体（管理版，不预装 DSH）
+### admin 变体（管理版，预装最新 DSH）
 
-`admin` 变体**不预装任何 DSH 版本**。容器启动后访问 `/` 会自动跳转到管理员页面 `/__admin/`，
-你可以在页面上：
+`admin` 变体**随镜像预装最新 DSH（@next）**，容器启动后管理服务自动识别并拉起 DSH，直接访问 `/` 即可进入 DSH 界面；
+访问 `/__admin/` 进入管理台，你可以在页面上：
 
 - 查看 npm 包 `@deepseek-ai/dsh` 的可用版本（`latest`/`next` 等 dist-tag + 全部版本列表），
   选择并**安装 / 切换** DSH 版本，安装进度实时显示；
@@ -127,8 +127,8 @@ docker run -d \
 ```
 
 > admin 变体保留了 `python3` + `build-essential`：node-pty 在 Linux 上没有预编译产物，
-> 页面安装 DSH 时需要容器内从源码编译原生模块，因此该镜像比精简版略大。
-> admin 变体无固定的 DSH 版本号 tag，版本号 tag 为构建日期（如 `admin-20260829`）。
+> 在管理台安装其他版本 DSH 时需要容器内从源码编译原生模块，因此该镜像比精简版略大。
+> admin 变体预装最新 DSH，版本号 tag 即为 DSH 版本（如 `admin-0.1.1`）。
 
 ## 端口配置
 

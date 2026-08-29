@@ -17,7 +17,7 @@ Deploy **DeepSeek Harness (DSH)** + **Node reverse proxy** with Docker:
 
 ```
 deepseek-harness/
-├── Dockerfile            # node:24-slim + install DSH + proxy (supports DEV_TOOLS build arg; admin variant does not pre-install DSH)
+├── Dockerfile            # node:24-slim + install DSH + proxy (supports DEV_TOOLS build arg; admin variant pre-installs the latest DSH)
 ├── entrypoint.sh         # start DSH first, wait until ready, then start the proxy (detects the admin variant marker and runs the manager service instead)
 ├── proxy/
 │   ├── index.js          # proxy (forwarding + polyfill injection + Origin alignment + Basic Auth)
@@ -74,7 +74,7 @@ matches the `@deepseek-ai/dsh` version actually installed at build time, current
 | `smanx/deepseek-harness:devtools-min-latest` | `smanx/deepseek-harness:devtools-min-<version>` | Minimal tools for common debugging | git, curl, wget, nano, jq, procps, ca-certificates, unzip; npm globals: pnpm; uv |
 | `smanx/deepseek-harness:devtools-latest` | `smanx/deepseek-harness:devtools-<version>` | Full tools for developing/compiling inside the container | everything in Minimal + vim, openssh-client, zip, htop, tmux, tree, openssl, python3, build-essential (make/g++), bash-completion; npm globals: pnpm; uv |
 | `smanx/deepseek-harness:test-latest` | `smanx/deepseek-harness:test-<version>` | Test tag: full tools + auto-installs DSH plugins | same as Full Tools (pnpm, uv); additionally runs `dsh plugin --profile web add github:smanx/dsh-conversation-indicator#main` after DSH install |
-| `smanx/deepseek-harness:admin-latest` | `smanx/deepseek-harness:admin-<build-date>` | Admin variant: **DSH is NOT pre-installed**, land in an admin page to pick/install/switch versions | same as Full Tools (pnpm, uv) + manager service; keeps python3/build-essential to compile node-pty at runtime |
+| `smanx/deepseek-harness:admin-latest` | `smanx/deepseek-harness:admin-<version>` | Admin variant: **latest DSH pre-installed**, works out of the box; admin page to pick/install/switch versions | same as Full Tools (pnpm, uv) + manager service; keeps python3/build-essential to compile node-pty at runtime |
 
 ```bash
 # Minimal tools (DEV_TOOLS matches the first column of .build-variants)
@@ -104,10 +104,11 @@ docker build -t smanx/deepseek-harness:devtools-<version> --build-arg DEV_TOOLS=
 > client configs as `"command": "uvx"`); without uv those MCPs cannot run. uv downloads the Python
 > interpreter on demand on first use.
 
-### Admin Variant (no DSH pre-installed)
+### Admin Variant (latest DSH pre-installed)
 
-The `admin` variant does **not** pre-install any DSH version. After the container starts, visiting
-`/` redirects to the admin page `/__admin/`, where you can:
+The `admin` variant **pre-installs the latest DSH (@next)**. After the container starts, the manager
+service detects and starts DSH automatically, so `/` serves the DSH UI directly; visiting `/__admin/`
+opens the admin page, where you can:
 
 - Browse the available versions of the npm package `@deepseek-ai/dsh` (dist-tags like `latest`/`next`
   plus the full version list), select and **install / switch** DSH versions, with live install progress;
@@ -132,9 +133,9 @@ docker run -d \
 ```
 
 > The admin variant keeps `python3` + `build-essential`: node-pty has no Linux prebuilt binaries,
-> and installing DSH from the page requires compiling the native module from source inside the
-> container, so this image is a bit larger than the slim one. The admin variant has no fixed DSH
-> version tag; its version tag is the build date (e.g. `admin-20260829`).
+> and installing other DSH versions from the page requires compiling the native module from source
+> inside the container, so this image is a bit larger than the slim one. Since the admin variant
+> pre-installs the latest DSH, its version tag is the DSH version (e.g. `admin-0.1.1`).
 
 ## Port Configuration
 
