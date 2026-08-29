@@ -22,10 +22,13 @@ if [ -n "$DSH_WORKSPACE" ]; then
   cd "$DSH_WORKSPACE"
 fi
 
-# ── 1. 启动 DSH（默认监听 127.0.0.1:3080）────────────────────────────
+# ── 1. 启动 DSH（默认监听 127.0.0.1:3079）────────────────────────────
 echo "[dsh] 启动 DSH (dsh web --port $DSH_PORT) ..."
-dsh web --port "$DSH_PORT" &
+# DSH 日志写入 /tmp/dsh-startup.log：工作区登记脚本需要从中读取启动令牌（?token=）
+dsh web --port "$DSH_PORT" > /tmp/dsh-startup.log 2>&1 &
 DSH_PID=$!
+# 同时把 DSH 日志转发到容器 stdout，保持可见性
+tail -f /tmp/dsh-startup.log 2>/dev/null &
 
 # ── 2. 等待 DSH 就绪（最多 120 秒）─────────────────────────────────
 echo "[dsh] 等待 DSH 就绪 (127.0.0.1:$DSH_PORT) ..."
@@ -49,6 +52,12 @@ if [ "$ready" != "1" ]; then
   exit 1
 fi
 echo "[dsh] DSH 就绪（pid $DSH_PID）"
+
+# ── 2.5 工作区自动登记：设置 DSH_WORKSPACE 时，把该目录登记进网页工作区列表 ──
+if [ -n "$DSH_WORKSPACE" ] && [ -f /app/register-workspace.js ]; then
+  echo "[dsh] 登记工作区: $DSH_WORKSPACE"
+  node /app/register-workspace.js || echo "[dsh] 工作区自动登记失败（不影响运行）"
+fi
 
 # ── 3. 容器停止时同时关闭 DSH ──────────────────────────────────────
 cleanup() {
