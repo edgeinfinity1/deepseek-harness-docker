@@ -6,81 +6,142 @@
 <title>DSH 管理台</title>
 <style>
   :root{
-    --bg:#0b1220; --panel:#111a2e; --panel2:#0f172a; --line:#233150;
-    --txt:#e6edf7; --mut:#8aa0bf; --acc:#3b82f6; --acc2:#2563eb;
-    --ok:#22c55e; --warn:#f59e0b; --err:#ef4444; --dim:#64748b;
+    --bg:#f4f6fb; --panel:#ffffff; --panel2:#f8fafc; --line:#e5e9f2;
+    --txt:#1f2733; --mut:#6b7686; --acc:#4f46e5; --acc2:#4338ca; --acc-soft:#eef2ff;
+    --ok:#16a34a; --ok-bg:#e8f7ee;
+    --warn:#d97706; --warn-bg:#fdf3e3;
+    --err:#dc2626; --err-bg:#fdeaea;
+    --act:#4f46e5; --act-bg:#eef2ff;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--txt);font:14px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:24px}
-  .wrap{max-width:880px;margin:0 auto}
-  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
-  .head-txt h1{font-size:20px;margin-bottom:4px}
+  body{
+    background:var(--bg);color:var(--txt);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:32px 20px 48px;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:900px;margin:0 auto}
+  /* 头部 */
+  .head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:24px}
+  .brand{display:flex;align-items:center;gap:12px;min-width:0}
+  .brand-mark{
+    flex-shrink:0;width:38px;height:38px;border-radius:11px;color:#fff;
+    background:linear-gradient(135deg,#6366f1,#8b5cf6);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 4px 12px rgba(99,102,241,.35);
+  }
+  .head-txt h1{font-size:20px;font-weight:700;letter-spacing:-.01em;margin-bottom:2px}
   .head-txt .sub{color:var(--mut);font-size:13px}
   #btnLang{
-    flex-shrink:0;background:var(--panel);border:1px solid var(--line);color:var(--txt);
-    border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;
+    flex-shrink:0;background:#fff;border:1px solid var(--line);color:var(--txt);
+    border-radius:999px;padding:7px 18px;font-size:13px;font-weight:600;cursor:pointer;
+    box-shadow:0 1px 2px rgba(16,24,40,.04);transition:border-color .15s ease,color .15s ease;
   }
   #btnLang:hover{border-color:var(--acc);color:var(--acc)}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
-  .card h2{font-size:15px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-  .badge{display:inline-block;padding:1px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--dim);color:#fff}
-  .badge.ok{background:var(--ok)} .badge.warn{background:var(--warn)} .badge.err{background:var(--err)} .badge.act{background:var(--acc)}
-  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  /* 卡片 */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;margin-bottom:18px;box-shadow:var(--shadow)}
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+  .card h2{font-size:15px;font-weight:650;letter-spacing:-.01em}
+  /* 状态徽章 */
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:600}
+  .badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .badge.ok{background:var(--ok-bg);color:var(--ok)}
+  .badge.warn{background:var(--warn-bg);color:var(--warn)}
+  .badge.err{background:var(--err-bg);color:var(--err)}
+  .badge.act{background:var(--act-bg);color:var(--act)}
+  /* 状态统计网格 */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .stat-label{font-size:12px;color:var(--mut);margin-bottom:6px}
+  .stat-value{font-size:15px;font-weight:600;word-break:break-all}
+  .card-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+  /* 表单 */
   label{color:var(--mut);font-size:13px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   input[type=text],select{
     flex:1;min-width:220px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
-    border-radius:8px;padding:8px 10px;font-size:13px;outline:none;
+    border-radius:10px;padding:9px 12px;font-size:13px;outline:none;
+    transition:border-color .15s ease,box-shadow .15s ease;
   }
-  input[type=text]:focus,select:focus{border-color:var(--acc)}
+  input[type=text]:focus,select:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft)}
+  /* 按钮 */
   button{
-    background:var(--acc);border:none;color:#fff;border-radius:8px;padding:8px 16px;
-    font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;
+    background:var(--acc);border:none;color:#fff;border-radius:10px;padding:9px 18px;
+    font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .15s ease;
   }
   button:hover{background:var(--acc2)}
   button:disabled{opacity:.5;cursor:not-allowed}
-  button.ghost{background:transparent;border:1px solid var(--line);color:var(--mut)}
-  button.ghost:hover{color:var(--txt);border-color:var(--mut)}
-  button.danger{background:#7f1d1d} button.danger:hover{background:#991b1b}
-  .hint{font-size:12px;color:var(--mut);margin-top:6px}
-  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px}
-  .kv dt{color:var(--mut)} .kv dd{color:var(--txt);word-break:break-all}
-  pre.log{
-    background:#05070d;border:1px solid var(--line);border-radius:8px;padding:10px 12px;
-    font:12px/1.55 ui-monospace,Consolas,monospace;color:#b8c7e0;height:240px;overflow:auto;white-space:pre-wrap;word-break:break-all;
+  button.ghost{background:#fff;border:1px solid var(--line);color:var(--mut)}
+  button.ghost:hover{color:var(--txt);border-color:var(--mut);background:var(--panel2)}
+  button.danger{background:var(--err-bg);color:var(--err);border:1px solid #f3c6c6}
+  button.danger:hover{background:#fbd5d5}
+  .hint{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.7}
+  .hint code{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;color:var(--txt)}
+  /* 日志 */
+  .log{
+    background:#0f1524;border:1px solid #1c2537;border-radius:12px;padding:12px 14px;
+    font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;color:#b8c7e0;
+    height:260px;overflow:auto;white-space:pre-wrap;word-break:break-all;
   }
-  pre.log .err{color:var(--err)}
-  a.back{color:var(--acc);text-decoration:none;font-size:13px}
+  .log .err{color:var(--err)}
+  /* 其他 */
+  a.back{color:var(--acc);text-decoration:none;font-weight:600}
   a.back:hover{text-decoration:underline}
-  .mt{margin-top:10px}
-  .tag{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;color:var(--mut)}
+  .mt{margin-top:12px}
+  .tag{display:inline-block;background:var(--acc-soft);color:var(--acc);border-radius:6px;padding:0 8px;font-size:12px;font-weight:600;margin-left:4px}
+  @media (max-width:720px){
+    .head{flex-direction:column;align-items:flex-start}
+    .stats{grid-template-columns:repeat(2,1fr)}
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="head">
-    <div class="head-txt">
-      <h1 data-i18n="title">DeepSeek Harness 管理台</h1>
-      <div class="sub" data-i18n="sub">管理员变体镜像 · 在此选择/切换 DSH 版本、配置 npm 源并管理 DSH 进程</div>
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      </div>
+      <div class="head-txt">
+        <h1 data-i18n="title">DeepSeek Harness 管理台</h1>
+        <div class="sub" data-i18n="sub">管理员变体镜像 · 在此选择/切换 DSH 版本、配置 npm 源并管理 DSH 进程</div>
+      </div>
     </div>
     <button id="btnLang" type="button">EN</button>
   </div>
 
   <div class="card">
-    <h2><span data-i18n="stTitle">运行状态</span> <span id="stBadge" class="badge warn" data-i18n="stChecking">检测中</span></h2>
-    <dl class="kv">
-      <dt data-i18n="stLabelCur">当前版本</dt><dd><span id="stActual">-</span> <span id="stRequested" class="tag"></span></dd>
-      <dt data-i18n="stLabelTime">安装时间</dt><dd id="stInstalledAt">-</dd>
-      <dt data-i18n="stLabelRun">运行状态</dt><dd id="stRunning">-</dd>
-      <dt data-i18n="stLabelUi">DSH 界面</dt><dd><a class="back" href="/" id="linkDash" data-i18n="stOpenUi">打开 DSH 界面 ↗</a></dd>
-    </dl>
-    <div class="row mt">
+    <div class="card-head">
+      <h2 data-i18n="stTitle">运行状态</h2>
+      <span id="stBadge" class="badge warn" data-i18n="stChecking">检测中</span>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label" data-i18n="stLabelCur">当前版本</div>
+        <div class="stat-value"><span id="stActual">-</span> <span id="stRequested" class="tag"></span></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label" data-i18n="stLabelTime">安装时间</div>
+        <div class="stat-value" id="stInstalledAt">-</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label" data-i18n="stLabelRun">运行状态</div>
+        <div class="stat-value" id="stRunning">-</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label" data-i18n="stLabelUi">DSH 界面</div>
+        <div class="stat-value"><a class="back" href="/" id="linkDash" data-i18n="stOpenUi">打开 DSH 界面 ↗</a></div>
+      </div>
+    </div>
+    <div class="card-actions">
       <button id="btnRestart" class="ghost" data-i18n="btnRestart">重启 DSH</button>
       <button id="btnRefresh" class="ghost" data-i18n="btnRefresh">刷新状态</button>
     </div>
   </div>
 
   <div class="card">
-    <h2 data-i18n="regTitle">npm 源（NPM_CONFIG_REGISTRY）</h2>
+    <div class="card-head"><h2 data-i18n="regTitle">npm 源（NPM_CONFIG_REGISTRY）</h2></div>
     <div class="row">
       <input type="text" id="regInput" placeholder="加载中..." spellcheck="false" autocomplete="off" data-i18n-ph="regPlaceholder">
       <button id="btnRegUseDef" data-i18n="btnRegUseDef">使用默认值</button>
@@ -90,7 +151,7 @@
   </div>
 
   <div class="card">
-    <h2 data-i18n="verTitle">DSH 版本</h2>
+    <div class="card-head"><h2 data-i18n="verTitle">DSH 版本</h2></div>
     <div class="row">
       <select id="verSelect"><option data-i18n="verLoading">加载版本列表中...</option></select>
       <button id="btnInstall" data-i18n="btnInstall">安装 / 切换版本</button>
@@ -100,8 +161,11 @@
   </div>
 
   <div class="card">
-    <h2><span data-i18n="logTitle">安装日志（实时）</span> <button id="btnClearLog" class="ghost" style="margin-left:auto" data-i18n="btnClearLog">清空</button></h2>
-    <pre class="log" id="log"></pre>
+    <div class="card-head">
+      <h2 data-i18n="logTitle">安装日志（实时）</h2>
+      <button id="btnClearLog" class="ghost" data-i18n="btnClearLog">清空</button>
+    </div>
+    <div class="log" id="log"></div>
   </div>
 </div>
 
