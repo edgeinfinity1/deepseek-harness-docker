@@ -7,7 +7,9 @@ const fs = require('fs');
 
 const LOG_FILE = process.env.DSH_WEB_LOG || '/app/.dsh-web.log';
 const TOKEN_FILE_AUTO = process.env.DSH_TOKEN_FILE_AUTO || '/app/.dsh-launch-token';
-const TOKEN_HEADER = (process.env.DSH_TOKEN_HEADER || 'x-dsh-token').toLowerCase();
+// 官方 DSH 0.1.2+ 的 launch token 通过「首页 URL 上的 ?token=」传入（见 dsh web 打印的
+// 地址格式），换取会话 cookie；不接受把 token 放请求头，因此这里用 query 追加。
+const TOKEN_QUERY_KEY = process.env.DSH_TOKEN_QUERY_KEY || 'token';
 
 const HARD_TOKEN = process.env.DSH_TOKEN || '';
 const HARD_TOKEN_FILE = process.env.DSH_TOKEN_FILE || '';
@@ -153,8 +155,9 @@ function pickIndexHeaders(req) {
   return out;
 }
 
-async function fetchRaw(origin, headers) {
-  const res = await fetch(origin + '/', { method: 'GET', headers, redirect: 'manual' });
+async function fetchRaw(origin, headers, path) {
+  const url = path && path !== '/' ? origin + path : origin + '/';
+  const res = await fetch(url, { method: 'GET', headers, redirect: 'manual' });
   const getSetCache = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
   return {
     status: res.status,
@@ -201,21 +204,33 @@ function sendRaw(r, res, transformHtml) {
 async function serveIndex(req, res, ctx) {
   const origin = ctx.origin;
   const transformHtml = ctx.transformHtml;
+  const reqUrl = req.url || '/';
   let first;
   try {
-    first = await fetchRaw(origin, pickIndexHeaders(req));
+    first = await fetchRaw(origin, pickIndexHeaders(req), reqUrl);
   } catch {
     return false;
   }
   if (first.status === 401) {
+    console.log(`[upstream-token] 根目录首次请求返回 ${first.status}，尝试携带 launch token 重发以换取会话 cookie`);
     const token = ensureToken();
     if (token) {
-      const headers = pickIndexHeaders(req);
-      headers[TOKEN_HEADER] = token;
+      // 官方格式：把 launch token 追加进根目录 URL 的 query，换取上游会话 cookie
+      const sep = reqUrl.includes('?') ? '&' : '?';
+      const authUrl = `${reqUrl}${sep}${TOKEN_QUERY_KEY}=${encodeURIComponent(token)}`;
       let retry;
-      try { retry = await fetchRaw(origin, headers); } catch { retry = null; }
-      if (retry) return sendRaw(retry, res, transformHtml);
+      try { retry = await fetchRaw(origin, pickIndexHeaders(req), authUrl); } catch { retry = null; }
+      if (retry) {
+        const sc = retry.setCookies.length;
+        console.log(`[upstream-token] 携带 token 重发 → 上游返回 ${retry.status}，下发 ${sc} 个会话 cookie`);
+        return sendRaw(retry, res, transformHtml);
+      }
+      console.log('[upstream-token] 携带 token 重发失败（网络异常或上游无响应），回退透传首次 401');
+    } else {
+      console.log('[upstream-token] 未获取到 launch token，跳过重发，透传首次 401');
     }
+  } else if (first.status !== 200) {
+    console.log(`[upstream-token] 根目录首次请求返回 ${first.status}（非 401），直接透传`);
   }
   return sendRaw(first, res, transformHtml);
 }

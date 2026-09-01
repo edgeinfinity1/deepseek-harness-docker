@@ -170,6 +170,12 @@ function broadcast(event, data) {
   }
 }
 
+// 管理性日志：同一条内容同时进 SSE（前端）与容器日志（docker logs）
+function emitLog(line) {
+  broadcast('log', { line });
+  process.stdout.write(`[manager-cmd] ${line}\n`);
+}
+
 function runCmd(cmd, args, env, onLine) {
   return new Promise((resolve, reject) => {
     let child;
@@ -213,8 +219,8 @@ async function installDsh(version, registry) {
   let ok = false;
   try {
     const args = ['install', '-g', '--prefix', INSTALL_DIR, '--no-audit', '--no-fund', `@deepseek-ai/dsh@${version}`];
-    broadcast('log', { line: `> ${NPM_CMD} ${args.join(' ')}` });
-    broadcast('log', { line: `> npm 源: ${registry}` });
+    emitLog(`> ${NPM_CMD} ${args.join(' ')}`);
+    emitLog(`> npm 源: ${registry}`);
     await runCmd(NPM_CMD, args, { ...process.env, NPM_CONFIG_REGISTRY: registry }, line => broadcast('log', { line }));
     if (!isDshInstalled()) throw new Error('安装完成但未找到 dsh 可执行文件，请确认版本号存在');
     const ver = actualVersion();
@@ -222,7 +228,7 @@ async function installDsh(version, registry) {
     state.requestedVersion = version;
     state.installedAt = new Date().toISOString();
     saveState();
-    broadcast('log', { line: `已安装 DSH ${ver}` });
+    emitLog(`已安装 DSH ${ver}`);
     ok = true;
   } catch (e) {
     broadcast('log', { line: `[错误] ${e.message}` });
@@ -234,7 +240,9 @@ async function installDsh(version, registry) {
   installing = false;
   broadcast('done', { ok, version: actualVersion() });
   if (ok) {
-    const r = await bootDsh();
+    // 必须先停掉旧进程再启动：bootDsh 有 dshProc 就会直接返回，
+    // 否则运行中的仍是旧版本 DSH
+    const r = await restartDsh();
     broadcast('boot', { ok: r.ok, reason: r.reason || '' });
   }
   return { ok };
