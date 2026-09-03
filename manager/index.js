@@ -19,11 +19,13 @@ const { createRequire } = require('module');
 const httpProxy = require('http-proxy');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
+const { serveIndex, injectIntoHead } = require('../proxy/upstream-token.js');
 
 // ── 端口与环境 ────────────────────────────────────────────────
 const DSH_PORT = Number(process.env.DSH_PORT) || 3079;
 const LISTEN_PORT = Number(process.env.PROXY_PORT) || 3080;
 const TARGET_ORIGIN = `http://127.0.0.1:${DSH_PORT}`;
+const DSH_WEB_LOG = process.env.DSH_WEB_LOG || '/app/.dsh-web.log'; // DSH 运行日志落盘，供 launch-token 打捞
 
 // DSH 安装目录（应挂载持久卷 dsh-install:/opt/dsh）
 const INSTALL_DIR = process.env.DSH_INSTALL_DIR || '/opt/dsh';
@@ -31,12 +33,6 @@ const DSH_BIN = path.join(INSTALL_DIR, 'bin', 'dsh');
 const DSH_PKG_JSON = path.join(INSTALL_DIR, 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'package.json');
 const MANAGER_DIR = path.join(INSTALL_DIR, 'manager');
 const STATE_FILE = path.join(MANAGER_DIR, 'state.json');
-
-// DSH 工作目录：设置 DSH_WORKSPACE 环境变量可切换 DSH 的工作目录（默认跟随容器进程 cwd）。
-// 管理服务会把该目录设为 DSH 进程的 cwd，并在 DSH 就绪后自动登记为工作区，使其直接出现在 DSH Web 界面中。
-const DSH_WORKSPACE = process.env.DSH_WORKSPACE
-  ? path.resolve(String(process.env.DSH_WORKSPACE).trim())
-  : null;
 
 // npm 源：默认值（容器启动环境变量 NPM_CONFIG_REGISTRY 可覆盖）+ 管理员页面保存值（优先级最高）
 const DEFAULT_REGISTRY = process.env.NPM_CONFIG_REGISTRY || 'https://registry.npmjs.org/';
@@ -99,112 +95,24 @@ function actualVersion() {
 // ── DSH 进程管理 ─────────────────────────────────────────────
 let dshProc = null;
 let dshReady = false;
-let dshLaunchToken = null;
-// dsh web 启动时会打印 `dsh web: http://127.0.0.1:<port>/?token=<launchToken>`
-const DSH_TOKEN_RE = /\?token=([A-Za-z0-9_-]+)/;
-
-async function waitForLaunchToken(timeoutMs = 15000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (dshLaunchToken) return dshLaunchToken;
-    await sleep(250);
-  }
-  return null;
-}
-
-// DSH 就绪后，把 DSH_WORKSPACE 登记为工作区（幂等：已存在则复用，不影响既有会话/文件）。
-// 渐进式：先无凭据直接调用（部分 DSH 版本回环访问 /api 无需 Cookie）；401 时再从启动日志
-// 抓 ?token= 换取浏览器会话 Cookie 后重试。
-async function registerWorkspace() {
-  if (!DSH_WORKSPACE || !dshReady) return;
-  const base = `http://127.0.0.1:${DSH_PORT}`;
-  try {
-    let result = await callWorkspaceCreate(base, null);
-    if (result === 'need-auth') {
-      const token = await waitForLaunchToken();
-      if (!token) {
-        console.warn('[manager] 未捕获 DSH 启动令牌，跳过工作区自动登记');
-        return;
-      }
-      // 1. 用启动令牌换取浏览器会话 Cookie（回环地址，Host/Origin 信任栅栏放行）
-      const authRes = await fetch(`${base}/?token=${token}`, { redirect: 'manual' });
-      const setCookie = authRes.headers.get('set-cookie');
-      if (!setCookie) {
-        console.warn('[manager] DSH 会话 Cookie 获取失败，跳过工作区自动登记');
-        return;
-      }
-      result = await callWorkspaceCreate(base, setCookie.split(';')[0]);
-    }
-    if (result.ok === true) {
-      const created = result.value && result.value.created === true;
-      console.log(`[manager] 工作区已登记: ${DSH_WORKSPACE}${created ? '（新建）' : '（复用）'}`);
-    } else {
-      console.warn(`[manager] 工作区登记失败: ${result.error}`);
-    }
-  } catch (e) {
-    console.warn(`[manager] 工作区自动登记异常: ${e.message}`);
-  }
-}
-
-async function callWorkspaceCreate(base, cookie) {
-  const headers = { 'content-type': 'application/json' };
-  if (cookie !== null) headers.cookie = cookie;
-  const res = await fetch(`${base}/api/workspace.create`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      type: 'client-request',
-      rpcId: `workspace-${Date.now()}`,
-      method: 'workspace.create',
-      payload: { path: DSH_WORKSPACE },
-    }),
-  });
-  if (res.status === 401) return 'need-auth';
-  const text = await res.text();
-  let body = null;
-  try { body = JSON.parse(text); } catch {}
-  const result = body && body.result;
-  if (res.ok && result && result.ok === true) return result;
-  return {
-    ok: false,
-    error: (result && result.error && result.error.message) || text || `HTTP ${res.status}`,
-  };
-}
 
 function bootDsh() {
   return new Promise(resolve => {
     if (dshProc) return resolve({ ok: true });
     if (!isDshInstalled()) return resolve({ ok: false, reason: '未安装 DSH' });
     dshReady = false;
-    dshLaunchToken = null;
     const env = {
       ...process.env,
       PATH: `${path.join(INSTALL_DIR, 'bin')}${path.delimiter}${process.env.PATH || ''}`,
       NPM_CONFIG_REGISTRY: effectiveRegistry(),
     };
-    const spawnOpts = { env, stdio: 'pipe' };
-    if (DSH_WORKSPACE) {
-      try {
-        fs.mkdirSync(DSH_WORKSPACE, { recursive: true });
-        if (fs.statSync(DSH_WORKSPACE).isDirectory()) {
-          spawnOpts.cwd = DSH_WORKSPACE;
-          console.log(`[manager] DSH 工作目录 (DSH_WORKSPACE): ${DSH_WORKSPACE}`);
-        } else {
-          console.error(`[manager] DSH_WORKSPACE 不是目录，忽略: ${DSH_WORKSPACE}`);
-        }
-      } catch (e) {
-        console.error(`[manager] DSH_WORKSPACE 不可用: ${e.message}`);
-      }
-    }
     console.log(`[manager] 启动 DSH: ${DSH_BIN} web --port ${DSH_PORT}`);
-    const p = spawn(DSH_BIN, ['web', '--port', String(DSH_PORT)], spawnOpts);
+    const p = spawn(DSH_BIN, ['web', '--port', String(DSH_PORT)], { env, stdio: 'pipe' });
     dshProc = p;
-    p.stdout.on('data', d => {
-      process.stdout.write(`[dsh] ${d}`);
-      const m = DSH_TOKEN_RE.exec(String(d));
-      if (m) dshLaunchToken = m[1];
-    });
-    p.stderr.on('data', d => process.stderr.write(`[dsh] ${d}`));
+    // DSH 运行日志：同一份内容同时写容器输出（可见）与 DSH_WEB_LOG 落盘（供 launch-token 打捞）
+    const logStream = fs.createWriteStream(DSH_WEB_LOG, { flags: 'a' });
+    p.stdout.on('data', d => { logStream.write(d); process.stdout.write(`[dsh] ${d}`); });
+    p.stderr.on('data', d => { logStream.write(d); process.stderr.write(`[dsh] ${d}`); });
     p.on('error', err => {
       console.error('[manager] DSH 启动失败:', err.message);
       dshProc = null;
@@ -215,15 +123,11 @@ function bootDsh() {
       console.log(`[manager] DSH 已退出 (code=${code}, sig=${sig})`);
       if (dshProc === p) dshProc = null;
       dshReady = false;
+      try { logStream.end(); } catch {}
     });
-    waitDshReady().then(async ok => {
+    waitDshReady().then(ok => {
       dshReady = ok;
-      if (ok) {
-        if (DSH_WORKSPACE) await registerWorkspace();
-        console.log('[manager] DSH 就绪');
-      } else {
-        console.log('[manager] DSH 120 秒内未就绪');
-      }
+      console.log(ok ? '[manager] DSH 就绪' : '[manager] DSH 120 秒内未就绪');
       resolve({ ok });
     });
   });
@@ -271,6 +175,12 @@ function broadcast(event, data) {
   }
 }
 
+// 管理性日志：同一条内容同时进 SSE（前端）与容器日志（docker logs）
+function emitLog(line) {
+  broadcast('log', { line });
+  process.stdout.write(`[manager-cmd] ${line}\n`);
+}
+
 function runCmd(cmd, args, env, onLine) {
   return new Promise((resolve, reject) => {
     let child;
@@ -284,7 +194,10 @@ function runCmd(cmd, args, env, onLine) {
       while ((i = buf.indexOf('\n')) !== -1) {
         const line = buf.slice(0, i).replace(/\r$/, '');
         buf = buf.slice(i + 1);
-        if (line.trim()) onLine(line);
+        if (line.trim()) {
+          process.stdout.write(`[manager-cmd] ${line}\n`); // 同时进容器日志
+          onLine(line);
+        }
       }
     };
     child.stdout.on('data', push);
@@ -293,7 +206,10 @@ function runCmd(cmd, args, env, onLine) {
     // 用 exit 而非 close：npm 会派生 node-gyp/make 等子进程并可能继承管道，
     // 导致 close 在命令真正结束后一直不触发（表现为安装任务卡在"安装中"）
     child.on('exit', (code, sig) => {
-      if (buf.trim()) onLine(buf);
+      if (buf.trim()) {
+        process.stdout.write(`[manager-cmd] ${buf.trim()}\n`); // 同时进容器日志
+        onLine(buf);
+      }
       if (code === 0) resolve();
       else reject(new Error(`命令退出码 ${code == null ? '信号 ' + sig : code}`));
     });
@@ -308,8 +224,8 @@ async function installDsh(version, registry) {
   let ok = false;
   try {
     const args = ['install', '-g', '--prefix', INSTALL_DIR, '--no-audit', '--no-fund', `@deepseek-ai/dsh@${version}`];
-    broadcast('log', { line: `> ${NPM_CMD} ${args.join(' ')}` });
-    broadcast('log', { line: `> npm 源: ${registry}` });
+    emitLog(`> ${NPM_CMD} ${args.join(' ')}`);
+    emitLog(`> npm 源: ${registry}`);
     await runCmd(NPM_CMD, args, { ...process.env, NPM_CONFIG_REGISTRY: registry }, line => broadcast('log', { line }));
     if (!isDshInstalled()) throw new Error('安装完成但未找到 dsh 可执行文件，请确认版本号存在');
     const ver = actualVersion();
@@ -317,7 +233,7 @@ async function installDsh(version, registry) {
     state.requestedVersion = version;
     state.installedAt = new Date().toISOString();
     saveState();
-    broadcast('log', { line: `已安装 DSH ${ver}` });
+    emitLog(`已安装 DSH ${ver}`);
     ok = true;
   } catch (e) {
     broadcast('log', { line: `[错误] ${e.message}` });
@@ -329,7 +245,9 @@ async function installDsh(version, registry) {
   installing = false;
   broadcast('done', { ok, version: actualVersion() });
   if (ok) {
-    const r = await bootDsh();
+    // 必须先停掉旧进程再启动：bootDsh 有 dshProc 就会直接返回，
+    // 否则运行中的仍是旧版本 DSH
+    const r = await restartDsh();
     broadcast('boot', { ok: r.ok, reason: r.reason || '' });
   }
   return { ok };
@@ -434,12 +352,8 @@ function terminalShell() {
 }
 
 function terminalCwd() {
-  if (DSH_WORKSPACE) {
-    try { fs.mkdirSync(DSH_WORKSPACE, { recursive: true }); } catch {}
-  }
   const candidates = [
     process.env.TERMINAL_CWD,
-    DSH_WORKSPACE,
     process.env.HOME,
     '/root',
     process.cwd(),
@@ -835,6 +749,11 @@ const server = http.createServer(async (req, res) => {
 
   // 其余路径：DSH 就绪则反代，否则跳到管理员页
   if (dshReady) {
+    // 根目录 GET 走 serveIndex：上游(如官方 0.1.2+)返回 401 时携带 launch token 重发一次
+    if (req.method === 'GET' && pathname === '/') {
+      const handled = await serveIndex(req, res, { origin: TARGET_ORIGIN, transformHtml: html => injectIntoHead(html, HTML_INJECT) });
+      if (handled) return;
+    }
     alignOrigin(req);
     return proxy.web(req, res);
   }
@@ -858,7 +777,6 @@ server.on('upgrade', (req, socket, head) => {
 server.listen(LISTEN_PORT, '0.0.0.0', () => {
   console.log(`[manager] 管理服务已启动，监听 0.0.0.0:${LISTEN_PORT}`);
   console.log(`[manager] 管理员页面: http://<host>:${LISTEN_PORT}/__admin/（未安装 DSH 时访问 / 会自动跳转）`);
-  console.log(`[manager] DSH 工作目录: ${DSH_WORKSPACE || '(跟随容器进程 cwd)'}`);
   console.log(`[manager] npm 源: 默认 ${DEFAULT_REGISTRY}${state.registry ? `，页面已配置 ${state.registry}` : ''}`);
   if (isDshInstalled()) {
     // 镜像预装 / 卷上已有 DSH 时，同步版本到状态，保证页面「当前版本」正常显示

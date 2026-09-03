@@ -1,6 +1,7 @@
 const http = require('http');
 const httpProxy = require('http-proxy');
 const crypto = require('crypto');
+const { serveIndex, injectIntoHead } = require('./upstream-token.js');
 
 // 源端口（DSH 监听端口，默认 3079）与代理端口（代理对外监听端口，默认 3080）。
 // 两者必须不同（同一端口只能被一个进程监听），均可通过环境变量覆盖：
@@ -141,6 +142,17 @@ const server = http.createServer((req, res) => {
   const pathname = new URL(req.url ?? '/', 'http://proxy').pathname;
   if (!PUBLIC_PATHS.has(pathname) && !checkAuth(req)) {
     rejectUnauthorized(res);
+    return;
+  }
+  // 根目录 GET 走 serveIndex：上游(如官方 0.1.2+)返回 401 时携带 launch token 重发一次，
+  // 换取会话 cookie；返回 false（异常）则回退到普通反向代理。
+  if (req.method === 'GET' && pathname === '/') {
+    serveIndex(req, res, { origin: TARGET_ORIGIN, transformHtml: html => injectIntoHead(html, POLYFILL) })
+      .then((handled) => {
+        if (handled) return;
+        alignOrigin(req);
+        proxy.web(req, res);
+      });
     return;
   }
   alignOrigin(req);

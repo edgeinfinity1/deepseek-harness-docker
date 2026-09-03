@@ -148,28 +148,6 @@ The source port (DSH) and proxy port (external) can both be configured via envir
 
 > The two must differ (one port can only be bound by one process).
 
-### Working directory (DSH_WORKSPACE)
-
-You can switch DSH's working directory via the `DSH_WORKSPACE` environment variable (**supported by all variants**):
-
-| Environment variable | Meaning | Default |
-|---|---|---|
-| `DSH_WORKSPACE` | DSH working directory: the DSH process's cwd is switched to this directory (created automatically if missing); once DSH is ready, the directory is auto-registered as a workspace and appears in the web UI's workspace list, so new sessions/files land there by default (no longer under `/root`) | unset (follows the container process cwd) |
-
-```bash
-# Switch DSH's working directory to /workspace (mount a named volume to persist its files)
-docker run -d \
-  --name dsh-harness \
-  -p 3080:3080 \
-  -v dsh-data:/root/.dsh \
-  -v my-workspace:/workspace \
-  -e DSH_WORKSPACE=/workspace \
-  --restart unless-stopped \
-  smanx/deepseek-harness
-```
-
-> When `DSH_WORKSPACE` is unset, behavior is identical to before — existing deployments are unaffected.
-
 The admin variant also supports these environment variables:
 
 | Environment variable | Meaning | Default |

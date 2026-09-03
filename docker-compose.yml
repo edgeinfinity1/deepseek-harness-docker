@@ -13,6 +13,4 @@ services:
             - 3080:3080
         volumes:
             - ./root:/root
-        environment:
-            - DSH_WORKSPACE=/root/workspace
         restart: unless-stopped

@@ -61,9 +61,6 @@ RUN cd /app/manager && npm install --omit=dev --no-audit --no-fund
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# 工作区自动登记脚本（普通模式：设置 DSH_WORKSPACE 时把该目录登记进 DSH 网页工作区列表）
-COPY register-workspace.js /app/register-workspace.js
-
 # admin 变体标记：镜像内存在 /app/.admin-mode 时 entrypoint.sh 改走管理服务
 # （预装最新 DSH，管理台仍可自选版本安装/切换、配置 npm 源）
 RUN if [ "$DEV_TOOLS" = "admin" ]; then touch /app/.admin-mode; fi
