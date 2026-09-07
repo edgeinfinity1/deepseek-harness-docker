@@ -57,6 +57,13 @@ function lastMatch(text, regex) {
   return last;
 }
 
+// token 去敏：仅保留头尾 4 个字符，中间用 * 填充，便于日志排查又不泄露完整 token
+function maskToken(t) {
+  const s = String(t || '');
+  if (s.length <= 8) return s ? s.slice(0, 1) + '****' : '(empty)';
+  return s.slice(0, 4) + '****' + s.slice(-4);
+}
+
 // 从日志文本中提取最新（末尾）的 launch token
 function extractFromText(text) {
   if (PATTERN) {
@@ -145,11 +152,14 @@ const FORWARD_HEADERS = [
   'sec-fetch-dest', 'sec-fetch-mode', 'sec-fetch-site',
   'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform',
 ];
-function pickIndexHeaders(req) {
+function pickIndexHeaders(req, dropCookie) {
   const src = req.headers || {};
   const out = { accept: '*/*', 'accept-encoding': 'identity' };
   for (let i = 0; i < FORWARD_HEADERS.length; i++) {
     const n = FORWARD_HEADERS[i];
+    // token 交换 = 换取全新会话；浏览器若带旧 cookie（过期/无效会话），
+    // 上游会因 cookie 校验失败直接 401，导致重发永远失败。因此重发时剥离。
+    if (dropCookie && n === 'cookie') continue;
     if (src[n]) out[n] = src[n];
   }
   return out;
@@ -191,7 +201,10 @@ function sendRaw(r, res, transformHtml) {
   let body = r.body;
   const ct = String(r.headers.get ? r.headers.get('content-type') : '').toLowerCase();
   if (ct.includes('text/html') && transformHtml) body = transformHtml(body);
-  hs['Content-Type'] = ct || 'text/html; charset=utf-8';
+  // 3xx/空 body 的响应（如 303 重定向）不设 Content-Type，避免误导浏览器按 HTML 处理
+  if (body && body.length) {
+    hs['Content-Type'] = ct || 'text/html; charset=utf-8';
+  }
 
   res.writeHead(r.status, hs);
   res.end(body);
@@ -212,17 +225,24 @@ async function serveIndex(req, res, ctx) {
     return false;
   }
   if (first.status === 401) {
-    console.log(`[upstream-token] 根目录首次请求返回 ${first.status}，尝试携带 launch token 重发以换取会话 cookie`);
     const token = ensureToken();
     if (token) {
+      console.log(`[upstream-token] 根目录首次请求返回 401，尝试携带 launch token（${maskToken(token)}）重发以换取会话 cookie`);
       // 官方格式：把 launch token 追加进根目录 URL 的 query，换取上游会话 cookie
       const sep = reqUrl.includes('?') ? '&' : '?';
       const authUrl = `${reqUrl}${sep}${TOKEN_QUERY_KEY}=${encodeURIComponent(token)}`;
       let retry;
-      try { retry = await fetchRaw(origin, pickIndexHeaders(req), authUrl); } catch { retry = null; }
+      // 重发是「换取全新会话」，必须剥离浏览器旧 cookie，否则上游可能因无效 cookie 直接 401
+      try { retry = await fetchRaw(origin, pickIndexHeaders(req, true), authUrl); } catch { retry = null; }
       if (retry) {
         const sc = retry.setCookies.length;
         console.log(`[upstream-token] 携带 token 重发 → 上游返回 ${retry.status}，下发 ${sc} 个会话 cookie`);
+        if (retry.status === 401) {
+          console.log(`[upstream-token] 自动登录失败：携带 launch token（${maskToken(token)}）重发仍返回 401（token 可能已过期/失效，或该上游版本不支持 query token 方式）`);
+        } else if (retry.status >= 300 && retry.status < 400) {
+          const loc = String(retry.headers.get ? retry.headers.get('location') : retry.headers.location || '');
+          console.log(`[upstream-token] 自动登录成功：上游 ${retry.status} 重定向到「${loc || '/'}」，下发 ${sc} 个会话 cookie，透传后由浏览器自动跟随并携带 cookie`);
+        }
         return sendRaw(retry, res, transformHtml);
       }
       console.log('[upstream-token] 携带 token 重发失败（网络异常或上游无响应），回退透传首次 401');
