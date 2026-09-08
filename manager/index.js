@@ -595,9 +595,7 @@ function handleTerminalUpgrade(req, socket, head) {
 // ── 反向代理（复用旧代理逻辑）────────────────────────────────
 // crypto.randomUUID polyfill：局域网 IP 是非安全上下文，DSH 前端依赖该 API 生成 rpcId
 const POLYFILL = '<script>(function(){try{if(typeof crypto!=="undefined"&&crypto&&typeof crypto.randomUUID!=="function"){crypto.randomUUID=function(){var b=crypto.getRandomValues(new Uint8Array(16));b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;var h="";for(var i=0;i<16;i++){h+=b[i].toString(16).padStart(2,"0")}return h.slice(0,8)+"-"+h.slice(8,12)+"-"+h.slice(12,16)+"-"+h.slice(16,20)+"-"+h.slice(20)}}}catch(e){}})();</script>';
-// 在 DSH 页面注入「管理」悬浮按钮，随时可回到管理员页调整版本
-const ADMIN_BUTTON = '<script>(function(){var a=document.createElement("a");a.href="/__admin/";a.textContent="\u2699 \u7ba1\u7406";a.title="DSH \u7248\u672c\u7ba1\u7406";a.style.cssText="position:fixed;right:14px;bottom:14px;z-index:2147483000;padding:8px 14px;background:rgba(15,23,42,.92);color:#fff;border-radius:8px;text-decoration:none;font:600 13px/1.4 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.35)";document.body.appendChild(a)})();</script>';
-const HTML_INJECT = POLYFILL + ADMIN_BUTTON;
+const HTML_INJECT = POLYFILL;
 // isLoopbackHostname 恒真改写：局域网访问也能用设置类功能
 const LOOPBACK_JS_NEEDLE = 'isLoopbackHostname(pageLocation.hostname)';
 const LOOPBACK_JS_REPLACEMENT = 'true';
