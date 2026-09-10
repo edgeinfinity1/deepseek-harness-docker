@@ -62,6 +62,25 @@ const proxy = httpProxy.createProxyServer({
   changeOrigin: true,
 });
 
+// error 兜底：上游（DSH）不可达/崩溃时，http-proxy 默认无 error 监听会直接 throw
+// 未捕获异常导致整个代理进程挂死。这里统一接管所有转发错误：HTTP 请求回 502，
+// WS 升级直接销毁 socket，并打印错误便于排查（DSH 掉线不再表现为进程崩溃）。
+proxy.on('error', (err, req, res) => {
+  console.error(`[proxy] 转发上游 ${TARGET_ORIGIN} 出错：${err.code || err.message}`, err.stack || '');
+  if (res && res.writeHead) {
+    // 正常 HTTP 连接：尽可能回 502；若响应已写出则直接结束
+    if (res.headersSent) {
+      res.end();
+    } else {
+      res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('502 Bad Gateway: 上游 DSH 不可达或已退出');
+    }
+  } else if (res && res.destroy) {
+    // WS 升级：res 实为底层 socket，无 writeHead，直接销毁
+    res.destroy();
+  }
+});
+
 // 核心修复：crypto.randomUUID polyfill。
 // DSH 前端用 crypto.randomUUID() 生成 rpcId，但该 API 只在 https/localhost
 // 等安全上下文可用；通过局域网 IP 访问时页面是非安全上下文，randomUUID
